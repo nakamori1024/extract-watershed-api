@@ -6,7 +6,7 @@ Convert [J-FlwDir](https://www.csis.u-tokyo.ac.jp/~yamana/j-flwdir/) flow direct
 
 ```
 J-FlwDir 1-deg tiles  -->  mosaic  -->  GeoTIFF  -->  to-cog  -->  COG
-                                                  -->  to-zarr -->  Zarr v3
+                                                 -->  to-zarr -->  Zarr v3
 ```
 
 ## Setup
