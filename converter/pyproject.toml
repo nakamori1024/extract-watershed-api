@@ -1,7 +1,7 @@
 [project]
 name = "converter"
 version = "0.1.0"
-description = "Add your description here"
+description = "Convert J-FlwDir flow direction data to COG / Zarr formats"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -10,6 +10,9 @@ dependencies = [
     "rasterio>=1.5.1",
     "zarr>=3.3.0",
 ]
+
+[project.scripts]
+jflwdir-convert = "converter.cli:main"
 
 [build-system]
 requires = ["hatchling"]
