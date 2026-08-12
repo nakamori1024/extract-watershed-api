@@ -17,3 +17,11 @@ dependencies = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "converter",
+]
+
+[tool.uv.sources]
+converter = { workspace = true }
