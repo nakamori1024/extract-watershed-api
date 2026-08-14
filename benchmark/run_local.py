@@ -7,6 +7,12 @@ Runs every combination of variant (COG/Zarr configuration) x scenario
   starts cold.  (OS page cache may still be warm for local files,
   causing run 1 to differ from later runs — use the run column to
   distinguish them during analysis.)
+- By default each measurement runs in a separate spawned process.
+  GDAL's VSIcurl cache and connection pools are shared process-wide,
+  so repeating runs in the same process warms them from run 2 onward.
+  This causes library-specific caching behaviour to masquerade as a
+  format difference (observed: COG run 2+ is ~5x faster in-process).
+  Use --no-isolate to run in-process for warm-cache reference values.
 - A row is marked valid=true only when the cell count matches the
   expected value in scenarios.yaml AND bfs_mode is "chunked".
   Invalid measurements should be excluded from aggregated statistics.
@@ -22,8 +28,10 @@ from __future__ import annotations
 
 import argparse
 import csv
+import multiprocessing
 import statistics
 import time
+from concurrent.futures import ProcessPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -156,6 +164,11 @@ def main() -> None:
         nargs="*",
         help="scenario ids to run (default: all)",
     )
+    parser.add_argument(
+        "--no-isolate",
+        action="store_true",
+        help="run in-process instead of spawning (warm-cache reference values)",
+    )
     args = parser.parse_args()
 
     scenarios = yaml.safe_load(Path(args.scenarios).read_text())["scenarios"]
@@ -168,6 +181,16 @@ def main() -> None:
     now_local = datetime.now(UTC).astimezone()
     out_path = out_dir / f"{now_local.strftime('%Y%m%d_%H%M%S')}_{args.label}.csv"
 
+    # Process isolation: max_tasks_per_child=1 destroys the worker after
+    # each measurement, clearing GDAL and other process-wide caches.
+    executor: ProcessPoolExecutor | None = None
+    if not args.no_isolate:
+        executor = ProcessPoolExecutor(
+            max_workers=1,
+            mp_context=multiprocessing.get_context("spawn"),
+            max_tasks_per_child=1,
+        )
+
     rows: list[dict[str, Any]] = []
     total = len(variants) * len(scenarios) * args.repeats
     done = 0
@@ -177,7 +200,12 @@ def main() -> None:
         for variant in variants:
             for scenario in scenarios:
                 for run_idx in range(1, args.repeats + 1):
-                    row = run_once(variant, scenario, run_idx, args.label)
+                    if executor is not None:
+                        row = executor.submit(
+                            run_once, variant, scenario, run_idx, args.label
+                        ).result()
+                    else:
+                        row = run_once(variant, scenario, run_idx, args.label)
                     rows.append(row)
                     writer.writerow(row)
                     f.flush()  # preserve results even if interrupted
@@ -187,6 +215,9 @@ def main() -> None:
                         f"[{done}/{total}] {variant['name']} x {scenario['id']} "
                         f"run{run_idx}: {row.get('total_s', '-')}s {status}"
                     )
+
+    if executor is not None:
+        executor.shutdown()
 
     print(f"\nResults: {out_path}")
     print(summarize(rows))
