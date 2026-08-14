@@ -1,0 +1,39 @@
+# Benchmark pour-point catalogue.
+# expected_cell_count is a pre-measured value. If the result does not match,
+# the row is recorded as invalid.
+#
+# Coordinates must be pixel-centre values (lat = 46 - (row + 0.5) / 3600).
+# Coordinates that fall exactly on a pixel boundary (e.g. 36.2) can land on
+# a neighbouring pixel due to tiny float differences in the transform between
+# readers (confirmed: 36.2, 139.92 maps to different rows in COG vs Zarr).
+#
+# Coordinate sources:
+# - tone:           POC API spec example (Tone River mouth, Choshi)
+# - ishikari:       most-downstream cell of the Ishikari River, found by
+#                   walking downstream along flow directions
+# - tone_tributary: POC profile_basin.py point, snapped to pixel centre
+# - coastal_small:  small independent coastal stream near Ishikari River mouth
+scenarios:
+  - id: tone
+    description: Tone River full basin (large)
+    latitude: 35.7446
+    longitude: 140.8507
+    expected_cell_count: 20204838
+
+  - id: ishikari
+    description: Ishikari River full basin (large)
+    latitude: 43.2704
+    longitude: 141.3707
+    expected_cell_count: 20705177
+
+  - id: tone_tributary
+    description: Tone River tributary (medium)
+    latitude: 36.2001389
+    longitude: 139.9198611
+    expected_cell_count: 2152197
+
+  - id: coastal_small
+    description: Small coastal stream (tiny, dominated by request overhead)
+    latitude: 43.2598611
+    longitude: 141.3798611
+    expected_cell_count: 1851

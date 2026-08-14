@@ -1,0 +1,11 @@
+# Data variant definitions for benchmarking.
+# format: cog (CogReader) or zarr (ZarrReader)
+# uri: path relative to the repository root
+variants:
+  - name: gtiff_b512
+    format: cog
+    uri: data/dir_base.tif
+
+  - name: zarr_c512
+    format: zarr
+    uri: data/dir_c512.zarr
