@@ -1,0 +1,37 @@
+# S3 variant definitions for benchmarking.
+variants:
+  # COG: block size variants (LZW compression)
+  - name: cog_b256
+    format: cog
+    uri: s3://amplify-svelte-pmtiles/jflwdir-bench/dir_cog_b256.tif
+  - name: cog_b512
+    format: cog
+    uri: s3://amplify-svelte-pmtiles/jflwdir-bench/dir_cog_b512.tif
+  - name: cog_b1024
+    format: cog
+    uri: s3://amplify-svelte-pmtiles/jflwdir-bench/dir_cog_b1024.tif
+  - name: cog_b2048
+    format: cog
+    uri: s3://amplify-svelte-pmtiles/jflwdir-bench/dir_cog_b2048.tif
+
+  # Zarr: chunk size variants (zstd level 0)
+  - name: zarr_c256
+    format: zarr
+    uri: s3://amplify-svelte-pmtiles/jflwdir-bench/dir_zarr_c256.zarr
+  - name: zarr_c512
+    format: zarr
+    uri: s3://amplify-svelte-pmtiles/jflwdir-bench/dir_zarr_c512.zarr
+  - name: zarr_c1024
+    format: zarr
+    uri: s3://amplify-svelte-pmtiles/jflwdir-bench/dir_zarr_c1024.zarr
+  - name: zarr_c2048
+    format: zarr
+    uri: s3://amplify-svelte-pmtiles/jflwdir-bench/dir_zarr_c2048.zarr
+
+  # Zarr: sharded (read unit = chunk, S3 object = shard)
+  - name: zarr_c256_s2048
+    format: zarr
+    uri: s3://amplify-svelte-pmtiles/jflwdir-bench/dir_zarr_c256_s2048.zarr
+  - name: zarr_c512_s2048
+    format: zarr
+    uri: s3://amplify-svelte-pmtiles/jflwdir-bench/dir_zarr_c512_s2048.zarr

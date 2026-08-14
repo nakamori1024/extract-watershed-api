@@ -5,12 +5,12 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "boto3>=1.43.67",
+    "boto3",
     "numpy>=2.5.1",
     "pillow>=12.3.0",
     "pydantic>=2.13.4",
     "rasterio>=1.5.1",
-    "s3fs>=0.4.2",
+    "s3fs>=2026.2.0",
     "zarr[remote]>=3.3.0",
 ]
 
