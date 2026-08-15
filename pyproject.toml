@@ -11,6 +11,7 @@ members = ["api", "converter", "benchmark", "infra"]
 
 [dependency-groups]
 dev = [
+    "boto3-stubs[s3]>=1.43.71",
     "mypy>=2.3.0",
     "pytest>=9.1.1",
     "ruff>=0.16.2",
