@@ -330,6 +330,7 @@ name = "benchmark"
 version = "0.1.0"
 source = { virtual = "benchmark" }
 dependencies = [
+    { name = "boto3" },
     { name = "httpx" },
     { name = "pyyaml" },
     { name = "watershed" },
@@ -337,6 +338,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "boto3", specifier = ">=1.43.56" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "watershed", editable = "api" },
