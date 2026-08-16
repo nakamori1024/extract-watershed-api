@@ -102,6 +102,9 @@
     "@aws-cdk/core:validateSnapshotRemovalPolicy": true,
     "@aws-cdk/custom-resources:logApiResponseDataPropertyTrueDefault": false,
     "@aws-cdk/customresources:installLatestAwsSdkDefault": false,
-    "@aws-cdk/s3-notifications:addS3TrustKeyPolicyForSnsSubscriptions": true
+    "@aws-cdk/s3-notifications:addS3TrustKeyPolicyForSnsSubscriptions": true,
+    "inputBucketName": "amplify-svelte-pmtiles",
+    "cogS3Key": "jflwdir-bench/dir_cog_b512.tif",
+    "zarrS3Key": "jflwdir-bench/dir_zarr_c512.zarr"
   }
 }
