@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Watershed Extraction Demo — COG vs Zarr</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  #map { position: absolute; top: 0; left: 0; right: 340px; bottom: 0; }
+  #panel {
+    position: absolute; top: 0; right: 0; bottom: 0; width: 340px;
+    background: #fff; border-left: 1px solid #ccc; padding: 16px;
+    overflow-y: auto; display: flex; flex-direction: column; gap: 12px;
+  }
+  h2 { font-size: 16px; }
+  label { font-size: 13px; font-weight: 600; display: block; margin-bottom: 4px; }
+  input[type="text"], select {
+    width: 100%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px;
+    font-size: 13px; background: #fff;
+  }
+  #result {
+    background: #f7f7f7; border-radius: 6px; padding: 12px; font-size: 13px;
+    line-height: 1.6; min-height: 60px;
+  }
+  #result.loading { color: #666; }
+  #result.error { color: #c00; background: #fff0f0; }
+  .hint { font-size: 12px; color: #888; }
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 2px 0; vertical-align: top; }
+  td:first-child { font-weight: 600; width: 118px; }
+  .phase-bar {
+    display: inline-block; height: 9px; background: #2563eb;
+    border-radius: 2px; margin-right: 6px; vertical-align: middle;
+  }
+  .phase-row { font-size: 12px; white-space: nowrap; }
+  .spinner {
+    display: inline-block; width: 12px; height: 12px; margin-right: 6px;
+    border: 2px solid #ccc; border-top-color: #2563eb; border-radius: 50%;
+    animation: spin 0.8s linear infinite; vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+<div id="panel">
+  <h2>Watershed Extraction — COG vs Zarr</h2>
+
+  <div>
+    <label for="apiUrl">API URL (Lambda Function URL)</label>
+    <input type="text" id="apiUrl" placeholder="https://xxxx.lambda-url.ap-northeast-1.on.aws" />
+    <div class="hint">Can also be set via ?api=... query parameter</div>
+  </div>
+
+  <div>
+    <label for="variant">Dataset variant</label>
+    <select id="variant"></select>
+    <div class="hint">Same nationwide flow direction data, different format / chunk size</div>
+  </div>
+
+  <div class="hint">Click a river on the map to extract its upstream watershed</div>
+
+  <div id="result">Results will appear here</div>
+</div>
+
+<script>
+// All variants used in benchmarking (corresponds to benchmark/variants_s3.yaml).
+// dataset=null would use the server-side default key (environment variable)
+const VARIANTS = [
+  { label: 'COG  / block 256',  format: 'cog',  dataset: 'jflwdir-bench/dir_cog_b256.tif' },
+  { label: 'COG  / block 512',  format: 'cog',  dataset: 'jflwdir-bench/dir_cog_b512.tif' },
+  { label: 'COG  / block 1024', format: 'cog',  dataset: 'jflwdir-bench/dir_cog_b1024.tif' },
+  { label: 'COG  / block 2048', format: 'cog',  dataset: 'jflwdir-bench/dir_cog_b2048.tif' },
+  { label: 'Zarr / chunk 256',  format: 'zarr', dataset: 'jflwdir-bench/dir_zarr_c256.zarr' },
+  { label: 'Zarr / chunk 512',  format: 'zarr', dataset: 'jflwdir-bench/dir_zarr_c512.zarr' },
+  { label: 'Zarr / chunk 1024', format: 'zarr', dataset: 'jflwdir-bench/dir_zarr_c1024.zarr' },
+  { label: 'Zarr / chunk 2048', format: 'zarr', dataset: 'jflwdir-bench/dir_zarr_c2048.zarr' },
+  { label: 'Zarr / chunk 256 + shard 2048', format: 'zarr', dataset: 'jflwdir-bench/dir_zarr_c256_s2048.zarr' },
+  { label: 'Zarr / chunk 512 + shard 2048', format: 'zarr', dataset: 'jflwdir-bench/dir_zarr_c512_s2048.zarr' },
+];
+const DEFAULT_VARIANT = 5; // Zarr / chunk 512
+
+const map = L.map('map').setView([36.0, 139.5], 7);
+L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
+  attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html">地理院タイル</a>',
+  maxZoom: 18,
+}).addTo(map);
+
+let marker = null;
+let bboxRect = null;
+let basinOverlay = null;
+let busy = false;
+
+// --- Resolve API URL: ?api= param > localStorage > empty ---
+const apiInput = document.getElementById('apiUrl');
+const paramApi = new URLSearchParams(location.search).get('api');
+apiInput.value = paramApi || localStorage.getItem('watershedApiUrl') || '';
+apiInput.addEventListener('change', () => {
+  localStorage.setItem('watershedApiUrl', apiInput.value.trim());
+});
+
+// --- Build variant select options ---
+const variantSelect = document.getElementById('variant');
+VARIANTS.forEach((v, i) => {
+  const opt = document.createElement('option');
+  opt.value = i;
+  opt.textContent = v.label;
+  variantSelect.appendChild(opt);
+});
+variantSelect.value = DEFAULT_VARIANT;
+
+function showResult(html, cls) {
+  const el = document.getElementById('result');
+  el.className = cls || '';
+  el.innerHTML = html;
+}
+
+function phaseRows(phases) {
+  // Render per-phase timings with horizontal bars (longest phase = 120px)
+  const entries = Object.entries(phases || {});
+  if (!entries.length) return '';
+  const max = Math.max(...entries.map(([, s]) => s));
+  return entries.map(([name, s]) => {
+    const w = Math.max(2, Math.round((s / max) * 120));
+    return `<div class="phase-row"><span class="phase-bar" style="width:${w}px"></span>${name}: ${s.toFixed(2)}s</div>`;
+  }).join('');
+}
+
+map.on('click', async (e) => {
+  if (busy) return;  // Prevent concurrent requests while processing
+
+  const apiUrl = apiInput.value.trim().replace(/\/+$/, '');
+  if (!apiUrl) {
+    showResult('Set the API URL first.', 'error');
+    return;
+  }
+
+  const { lat, lng } = e.latlng;
+  const variant = VARIANTS[variantSelect.value];
+
+  if (marker) map.removeLayer(marker);
+  if (bboxRect) map.removeLayer(bboxRect);
+  if (basinOverlay) map.removeLayer(basinOverlay);
+  marker = L.marker([lat, lng]).addTo(map);
+
+  busy = true;
+  const startedAt = performance.now();
+  showResult(`<span class="spinner"></span>Extracting with <b>${variant.label}</b>...<br>` +
+    '<span class="hint">Large basins (e.g. Tone River) take ~20-30 s</span>', 'loading');
+
+  try {
+    const resp = await fetch(`${apiUrl}/extract-basin`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        latitude: lat,
+        longitude: lng,
+        format: variant.format,
+        dataset: variant.dataset,
+      }),
+    });
+    const data = await resp.json();
+
+    if (!resp.ok) {
+      showResult(`Error (${data.error || resp.status}): ${data.message || resp.statusText}`, 'error');
+      return;
+    }
+
+    const bb = data.bbox;
+    const bounds = [[bb.south, bb.west], [bb.north, bb.east]];
+    bboxRect = L.rectangle(bounds, { color: '#2563eb', weight: 2, fill: false }).addTo(map);
+    if (data.png_url) {
+      basinOverlay = L.imageOverlay(data.png_url, bounds).addTo(map);
+    }
+    map.fitBounds(bboxRect.getBounds(), { padding: [30, 30] });
+
+    const clientSec = ((performance.now() - startedAt) / 1000).toFixed(1);
+    showResult(`<table>
+      <tr><td>Variant</td><td>${variant.label}</td></tr>
+      <tr><td>Cell count</td><td>${data.cell_count.toLocaleString()}</td></tr>
+      <tr><td>Area</td><td>${Math.round(data.area_km2).toLocaleString()} km²</td></tr>
+      <tr><td>Server time</td><td>${data.elapsed_sec} s (client: ${clientSec} s)</td></tr>
+      <tr><td>Chunks fetched</td><td>${data.chunks_fetched}</td></tr>
+      <tr><td>Phases</td><td>${phaseRows(data.phases)}</td></tr>
+      <tr><td>GeoTIFF</td><td><a href="${data.geotiff_url}" target="_blank">download</a></td></tr>
+    </table>`);
+  } catch (err) {
+    showResult(`Error: ${err.message}`, 'error');
+  } finally {
+    busy = false;
+  }
+});
+</script>
+</body>
+</html>
