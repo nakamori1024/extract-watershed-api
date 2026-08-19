@@ -1,0 +1,41 @@
+# CI: lint / type check / test / requirements.txt drift detection
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv (with cache)
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies (all workspace members)
+        run: uv sync --all-packages
+
+      - name: ruff lint
+        run: uv run ruff check .
+
+      - name: ruff format check
+        run: uv run ruff format --check .
+
+      - name: mypy type check
+        run: uv run mypy api/src converter/src benchmark/run_local.py benchmark/run_remote.py
+
+      - name: pytest
+        run: uv run pytest converter/tests api/tests infra/tests
+
+      - name: Check api/requirements.txt drift
+        # Lambda image deps are pinned via requirements.txt exported from uv.lock.
+        # Detect forgotten re-export after uv.lock updates.
+        run: |
+          uv export --project api --no-dev --no-hashes --no-emit-project --no-emit-workspace \
+            | grep -vE '^\s*(#|$)' | diff - <(grep -vE '^\s*(#|$)' api/requirements.txt) \
+            || { echo "::error::api/requirements.txt is out of sync with uv.lock. Regenerate with: uv export --project api --no-dev --no-hashes --no-emit-project --no-emit-workspace -o api/requirements.txt"; exit 1; }
