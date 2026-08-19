@@ -37,5 +37,5 @@ jobs:
         # Detect forgotten re-export after uv.lock updates.
         run: |
           uv export --project api --no-dev --no-hashes --no-emit-project --no-emit-workspace \
-            | grep -v '^#' | diff - <(grep -v '^#' api/requirements.txt) \
+            | grep -vE '^\s*(#|$)' | diff - <(grep -vE '^\s*(#|$)' api/requirements.txt) \
             || { echo "::error::api/requirements.txt is out of sync with uv.lock. Regenerate with: uv export --project api --no-dev --no-hashes --no-emit-project --no-emit-workspace -o api/requirements.txt"; exit 1; }
